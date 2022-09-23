@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
+	"github.com/microcosm-cc/bluemonday"
+	"golang.org/x/net/html"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/gmail/v1"
@@ -89,16 +93,81 @@ func main() {
 	}
 
 	user := "me"
-	r, err := srv.Users.Messages.List(user).MaxResults(2).Q("label:sephora-arrived").Do()
+	r, err := srv.Users.Messages.List(user).MaxResults(1).Q("label:sephora-arrived").Do()
 	if err != nil {
-		log.Fatalf("Unable to retrieve labels: %v", err)
+		log.Fatalf("Unable to retrieve Messages: %v", err)
 	}
 	if len(r.Messages) == 0 {
 		fmt.Println("No Messages found.")
 		return
 	}
+
+	// email := "trunidojoan@gmail.com"
 	fmt.Println("Messages:")
-	for _, l := range r.Messages {
-		fmt.Printf("- %v\n", l)
+	for _, m := range r.Messages {
+		fmt.Printf("%v\n", m.Id)
+		messageResponse, err := srv.Users.Messages.Get(user, string(m.Id)).Do()
+		if err != nil {
+			log.Fatalf("Get Messages Error: %v", err)
+		}
+		dataEncode := (messageResponse.Payload.Parts[1].Body.Data)
+		data, err := base64.URLEncoding.DecodeString(dataEncode)
+		if err != nil {
+			log.Fatalf("DecodeString Error: %v", err)
+		}
+
+		z := html.NewTokenizer(strings.NewReader(string(data)))
+		i := 0
+		var isTracking bool
+		var isShipTo bool
+		for {
+			i++
+			tt := z.Next()
+			switch tt {
+			case html.ErrorToken:
+				fmt.Println("End")
+				return
+
+			case html.StartTagToken:
+				// t := z.Token()
+
+			case html.TextToken:
+				t := z.Token()
+				htmlText := strings.TrimSpace(t.Data)
+				if htmlText == "" {
+					continue
+				}
+				if htmlText == "TRACKING #:" {
+					isTracking = true
+					continue
+				}
+				if strings.Contains(htmlText, "ORDER DATE:") {
+					fmt.Println(htmlText)
+					continue
+				}
+				if htmlText == "SHIP TO:" {
+					isShipTo = true
+					continue
+				}
+
+				if isTracking {
+					fmt.Println(htmlText)
+				}
+				isTracking = false
+
+				if isShipTo {
+					fmt.Println(htmlText)
+				}
+				isShipTo = false
+			}
+
+		}
+
+		p := bluemonday.StripTagsPolicy()
+		text := p.Sanitize(string(data))
+		text = strings.Replace(text, "\n", " ", -1)
+		text = strings.Replace(text, "   ", "", -1)
+		text = strings.Replace(text, "  ", "", -1)
+		// fmt.Printf("%s", text)
 	}
 }
