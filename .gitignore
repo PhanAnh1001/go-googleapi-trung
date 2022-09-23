@@ -15,3 +15,5 @@
 # vendor/
 
 trung.json
+credentials.json
+token.json
