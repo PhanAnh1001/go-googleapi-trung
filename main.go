@@ -80,6 +80,7 @@ type Item struct {
 	ItemQuantity string
 	TrackingId   string
 	ShipAdd      string
+	MailId       string
 }
 
 type ItemsPerPage struct {
@@ -95,12 +96,34 @@ const PerPageNumber = 500
 const Label = "label:Số lượng hàng-The INKEY"
 
 var HeaderCSV = []string{
-	"Date & Time Received", "Name", "Item ID", "Quantity", "Tracking ID", "Ship To",
+	"Date & Time Received", "Name", "Item ID", "Quantity", "Tracking ID", "Ship To", "Mail ID",
+}
+
+var totalMail int = 0
+
+func getShipAdd(z *html.Tokenizer) string {
+	var text string
+	var nodeType html.TokenType
+	isShipAdd := false
+	// fmt.Printf("nodeType %T %v %v \n", nodeType, nodeType, z.Token().Data)
+
+	for !isShipAdd {
+		nodeType = z.Next()
+		text = strings.TrimSpace(z.Token().Data)
+		// fmt.Printf("nodeType %T %v %v \n", nodeType, nodeType, z.Token().Data)
+		if nodeType == html.TextToken && text != "" {
+			isShipAdd = true
+			// fmt.Printf("text %T %v \n", text, text)
+		}
+	}
+	return text
 }
 
 func getMailItems(srv *gmail.Service, mail []*gmail.Message) []Item {
 	var items []Item
 	for _, m := range mail {
+		// Test 1 mail
+		// m.Id = "183519c7be21e282"
 		fmt.Printf("%v\n", m.Id)
 		messageResponse, err := srv.Users.Messages.Get(User, string(m.Id)).Do()
 		if err != nil {
@@ -199,16 +222,19 @@ func getMailItems(srv *gmail.Service, mail []*gmail.Message) []Item {
 				// 	continue
 				// }
 				if htmlText == "SHIP TO:" {
-					z.Next()
-					z.Next()
-					z.Next()
-					z.Next()
-					t = z.Token()
-					shipAdd = strings.TrimSpace(t.Data)
-					z.Next()
-					z.Next()
-					t = z.Token()
-					shipAdd += "\n" + strings.TrimSpace(t.Data)
+					// z.Next()
+					// z.Next()
+					// z.Next()
+					// z.Next()
+					// t = z.Token()
+					// shipAdd = strings.TrimSpace(t.Data)
+					// z.Next()
+					// z.Next()
+					// t = z.Token()
+					// shipAdd += "\n" + strings.TrimSpace(t.Data)
+
+					shipAdd = strings.TrimSpace(getShipAdd(z))
+					shipAdd += "\n" + strings.TrimSpace(getShipAdd(z))
 					// fmt.Printf("shipAdd %T %v \n", shipAdd, shipAdd)
 					continue
 				}
@@ -223,6 +249,7 @@ func getMailItems(srv *gmail.Service, mail []*gmail.Message) []Item {
 				ItemQuantity: itemQuantites[i],
 				TrackingId:   trackingId,
 				ShipAdd:      shipAdd,
+				MailId:       m.Id,
 			})
 		}
 		// fmt.Printf("%T %v \n", trackingId, trackingId)
@@ -231,6 +258,9 @@ func getMailItems(srv *gmail.Service, mail []*gmail.Message) []Item {
 		// fmt.Printf("%T %v \n", itemNames, itemNames)
 		// fmt.Printf("%T %v \n", itemIds, itemIds)
 		// fmt.Printf("%T %v \n", itemQuantites, itemQuantites)
+
+		// Test 1 mail
+		// break
 	}
 	return items
 }
@@ -253,6 +283,7 @@ func exportCsv(items []Item) {
 			item.ItemQuantity,
 			item.TrackingId,
 			item.ShipAdd,
+			item.MailId,
 		}
 		_ = csvwriter.Write(row)
 	}
@@ -265,6 +296,7 @@ func getFirstMails(srv *gmail.Service) ItemsPerPage {
 	var err error
 	r, err = srv.Users.Messages.List(User).Q(Label).MaxResults(PerPageNumber).Do()
 
+	totalMail += len(r.Messages)
 	return getMailPaginate(srv, r, err)
 }
 
@@ -273,6 +305,7 @@ func getNextMails(srv *gmail.Service, nextPageToken string) ItemsPerPage {
 	var err error
 	r, err = srv.Users.Messages.List(User).MaxResults(PerPageNumber).Q(Label).PageToken(nextPageToken).Do()
 
+	totalMail += len(r.Messages)
 	return getMailPaginate(srv, r, err)
 }
 
@@ -325,5 +358,6 @@ func main() {
 		nextPageToken = nextMails.NextPageToken
 	}
 
+	fmt.Printf("Total Mail: %v \n", totalMail)
 	exportCsv(items)
 }
