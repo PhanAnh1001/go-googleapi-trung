@@ -114,7 +114,13 @@ func getMailItems(srv *gmail.Service, mail []*gmail.Message) []Item {
 			}
 		}
 
-		dataEncode := (messageResponse.Payload.Parts[1].Body.Data)
+		var dataEncode string
+		for _, v := range messageResponse.Payload.Parts {
+			if v.MimeType == "text/html" && v.Body.Size > 0 {
+				dataEncode = v.Body.Data
+				break
+			}
+		}
 		data, err := base64.URLEncoding.DecodeString(dataEncode)
 		if err != nil {
 			log.Fatalf("DecodeString Error: %v", err)
