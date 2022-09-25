@@ -92,8 +92,13 @@ const User = "me"
 
 const PerPageNumber = 500
 
-// const Label = "label:sephora-arrived"
-const Label = "label:Số lượng hàng-The INKEY"
+const Label = "sephora-arrived"
+
+// const Label = "số-lượng-hàng-the-inkey"
+const StartDate = "2022/09/24"
+const EndDate = "2022/09/25"
+
+var Search string = fmt.Sprintf("label:%s after:%s before:%s", Label, StartDate, EndDate)
 
 var HeaderCSV = []string{
 	"Date & Time Received", "Name", "Item ID", "Quantity", "Tracking ID", "Ship To", "Mail ID",
@@ -247,7 +252,7 @@ func getMailItems(srv *gmail.Service, mail []*gmail.Message) []Item {
 				ItemName:     itemNames[i],
 				ItemId:       itemIds[i],
 				ItemQuantity: itemQuantites[i],
-				TrackingId:   trackingId,
+				TrackingId:   fmt.Sprintf("=\"%s\"", trackingId),
 				ShipAdd:      shipAdd,
 				MailId:       m.Id,
 			})
@@ -294,18 +299,21 @@ func exportCsv(items []Item) {
 func getFirstMails(srv *gmail.Service) ItemsPerPage {
 	var r *gmail.ListMessagesResponse
 	var err error
-	r, err = srv.Users.Messages.List(User).Q(Label).MaxResults(PerPageNumber).Do()
+	fmt.Printf("Search: %v \n", Search)
+	r, err = srv.Users.Messages.List(User).Q(Search).MaxResults(PerPageNumber).Do()
 
 	totalMail += len(r.Messages)
+	fmt.Printf("First Mails Number: %v \n", totalMail)
 	return getMailPaginate(srv, r, err)
 }
 
 func getNextMails(srv *gmail.Service, nextPageToken string) ItemsPerPage {
 	var r *gmail.ListMessagesResponse
 	var err error
-	r, err = srv.Users.Messages.List(User).MaxResults(PerPageNumber).Q(Label).PageToken(nextPageToken).Do()
+	r, err = srv.Users.Messages.List(User).MaxResults(PerPageNumber).Q(Search).PageToken(nextPageToken).Do()
 
 	totalMail += len(r.Messages)
+	fmt.Printf("Next Mails Number: %v \n", totalMail)
 	return getMailPaginate(srv, r, err)
 }
 
