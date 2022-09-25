@@ -95,10 +95,11 @@ const PerPageNumber = 500
 const Label = "sephora-arrived"
 
 // const Label = "số-lượng-hàng-the-inkey"
-const StartDate = "2022/09/24"
-const EndDate = "2022/09/25"
+const StartDate = "2022-09-24"
+const EndDate = "2022-09-25"
 
 var Search string = fmt.Sprintf("label:%s after:%s before:%s", Label, StartDate, EndDate)
+var CsvFileName string = fmt.Sprintf("items_%s_%s.csv", StartDate, EndDate)
 
 var HeaderCSV = []string{
 	"Date & Time Received", "Name", "Item ID", "Quantity", "Tracking ID", "Ship To", "Mail ID",
@@ -128,7 +129,7 @@ func getMailItems(srv *gmail.Service, mail []*gmail.Message) []Item {
 	var items []Item
 	for _, m := range mail {
 		// Test 1 mail
-		// m.Id = "183519c7be21e282"
+		m.Id = "183519c7be21e282"
 		fmt.Printf("%v\n", m.Id)
 		messageResponse, err := srv.Users.Messages.Get(User, string(m.Id)).Do()
 		if err != nil {
@@ -252,7 +253,7 @@ func getMailItems(srv *gmail.Service, mail []*gmail.Message) []Item {
 				ItemName:     itemNames[i],
 				ItemId:       itemIds[i],
 				ItemQuantity: itemQuantites[i],
-				TrackingId:   fmt.Sprintf("=\"%s\"", trackingId),
+				TrackingId:   trackingId,
 				ShipAdd:      shipAdd,
 				MailId:       m.Id,
 			})
@@ -265,13 +266,13 @@ func getMailItems(srv *gmail.Service, mail []*gmail.Message) []Item {
 		// fmt.Printf("%T %v \n", itemQuantites, itemQuantites)
 
 		// Test 1 mail
-		// break
+		break
 	}
 	return items
 }
 
 func exportCsv(items []Item) {
-	csvFile, err := os.Create("items.csv")
+	csvFile, err := os.Create(CsvFileName)
 
 	if err != nil {
 		log.Fatalf("failed creating file: %s", err)
