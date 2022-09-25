@@ -82,7 +82,17 @@ type Item struct {
 	ShipAdd      string
 }
 
+type ItemsPerPage struct {
+	Items         []Item
+	NextPageToken string
+}
+
 const User = "me"
+
+const PerPageNumber = 500
+
+// const Label = "label:sephora-arrived"
+const Label = "label:Số lượng hàng-The INKEY"
 
 var HeaderCSV = []string{
 	"Date & Time Received", "Name", "Item ID", "Quantity", "Tracking ID", "Ship To",
@@ -244,6 +254,38 @@ func exportCsv(items []Item) {
 	csvFile.Close()
 }
 
+func getFirstMails(srv *gmail.Service) ItemsPerPage {
+	var r *gmail.ListMessagesResponse
+	var err error
+	r, err = srv.Users.Messages.List(User).Q(Label).MaxResults(PerPageNumber).Do()
+
+	return getMailPaginate(srv, r, err)
+}
+
+func getNextMails(srv *gmail.Service, nextPageToken string) ItemsPerPage {
+	var r *gmail.ListMessagesResponse
+	var err error
+	r, err = srv.Users.Messages.List(User).MaxResults(PerPageNumber).Q(Label).PageToken(nextPageToken).Do()
+
+	return getMailPaginate(srv, r, err)
+}
+
+func getMailPaginate(srv *gmail.Service, r *gmail.ListMessagesResponse, err error) ItemsPerPage {
+	if err != nil {
+		log.Fatalf("Unable to retrieve Messages: %v", err)
+	}
+	if len(r.Messages) == 0 {
+		log.Fatalf("No Messages found.")
+	}
+
+	items := getMailItems(srv, r.Messages)
+
+	return ItemsPerPage{
+		Items:         items,
+		NextPageToken: r.NextPageToken,
+	}
+}
+
 func main() {
 	ctx := context.Background()
 	b, err := os.ReadFile("credentials.json")
@@ -263,23 +305,19 @@ func main() {
 		log.Fatalf("Unable to retrieve Gmail client: %v", err)
 	}
 
-	// Change Label
-	r, err := srv.Users.Messages.List(User).Q("label:sephora-arrived").Do()
-	// Change Limit
-	// r, err := srv.Users.Messages.List(User).MaxResults(2).Q("label:sephora-arrived").Do()
+	var items []Item
+	firstMails := getFirstMails(srv)
+	items = append(items, firstMails.Items...)
+	nextPageToken := firstMails.NextPageToken
 
-	if err != nil {
-		log.Fatalf("Unable to retrieve Messages: %v", err)
+	for {
+		if strings.TrimSpace(nextPageToken) == "" {
+			break
+		}
+		nextMails := getNextMails(srv, nextPageToken)
+		items = append(items, nextMails.Items...)
+		nextPageToken = nextMails.NextPageToken
 	}
-	if len(r.Messages) == 0 {
-		fmt.Println("No Messages found.")
-		return
-	}
-
-	// email := "trunidojoan@gmail.com"
-	fmt.Println("Messages:")
-
-	items := getMailItems(srv, r.Messages)
 
 	exportCsv(items)
 }
