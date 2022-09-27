@@ -129,7 +129,7 @@ func getMailItems(srv *gmail.Service, mail []*gmail.Message) []Item {
 	var items []Item
 	for _, m := range mail {
 		// Test 1 mail
-		m.Id = "183519c7be21e282"
+		// m.Id = "183519c7be21e282"
 		fmt.Printf("%v\n", m.Id)
 		messageResponse, err := srv.Users.Messages.Get(User, string(m.Id)).Do()
 		if err != nil {
@@ -266,7 +266,7 @@ func getMailItems(srv *gmail.Service, mail []*gmail.Message) []Item {
 		// fmt.Printf("%T %v \n", itemQuantites, itemQuantites)
 
 		// Test 1 mail
-		break
+		// break
 	}
 	return items
 }
