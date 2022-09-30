@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"golang.org/x/net/html"
 	"golang.org/x/oauth2"
@@ -25,7 +26,13 @@ func getClient(config *oauth2.Config) *http.Client {
 	// time.
 	tokFile := "token.json"
 	tok, err := tokenFromFile(tokFile)
-	if err != nil {
+
+	// Refresh token is expired affter 7 day from Expiry:
+	// https://developers.google.com/identity/protocols/oauth2#:~:text=A%20Google%20Cloud%20Platform%20project,per%20OAuth%202.0%20client%20ID.
+	isExpired := time.Now().Add(-7 * 24 * time.Hour).After(tok.Expiry)
+	fmt.Printf("Is Expired Refresh Token?: %v \n", isExpired)
+	if err != nil || isExpired {
+		fmt.Printf("Unable to retrieve token from File: %v \n", err)
 		tok = getTokenFromWeb(config)
 		saveToken(tokFile, tok)
 	}
@@ -81,6 +88,7 @@ type Item struct {
 	TrackingId   string
 	ShipAdd      string
 	MailId       string
+	ToEmail      string
 }
 
 type ItemsPerPage struct {
@@ -98,11 +106,13 @@ const Label = "sephora-arrived"
 const StartDate = "2022-09-24"
 const EndDate = "2022-09-25"
 
+const DateFormat = "2006/01/02"
+
 var Search string = fmt.Sprintf("label:%s after:%s before:%s", Label, StartDate, EndDate)
 var CsvFileName string = fmt.Sprintf("items_%s_%s.csv", StartDate, EndDate)
 
 var HeaderCSV = []string{
-	"Date & Time Received", "Name", "Item ID", "Quantity", "Tracking ID", "Ship To", "Mail ID",
+	"Date & Time Received", "Name", "Item ID", "Quantity", "Tracking ID", "Ship To", "Mail ID", "To Email",
 }
 
 var totalMail int = 0
@@ -137,9 +147,15 @@ func getMailItems(srv *gmail.Service, mail []*gmail.Message) []Item {
 		}
 
 		var timeReceive string
+		var toEmail string
 		for _, v := range messageResponse.Payload.Headers {
 			if v.Name == "Date" {
-				timeReceive = v.Value
+				timeObject, _ := time.Parse(time.RFC1123Z, v.Value)
+				timeReceive = timeObject.Format(DateFormat)
+			}
+			if v.Name == "To" {
+				toEmail = strings.ReplaceAll(v.Value, "<", "")
+				toEmail = strings.ReplaceAll(toEmail, ">", "")
 			}
 		}
 
@@ -221,24 +237,8 @@ func getMailItems(srv *gmail.Service, mail []*gmail.Message) []Item {
 					// fmt.Printf("trackingId %T %v \n", trackingId, trackingId)
 					continue
 				}
-				// if strings.Contains(htmlText, "ORDER DATE:") {
-				// 	orderDate = strings.ReplaceAll(htmlText, "ORDER DATE:", "")
-				// 	orderDate = strings.TrimSpace(orderDate)
-				// 	// fmt.Printf("orderDate %T %v \n", orderDate, orderDate)
-				// 	continue
-				// }
-				if htmlText == "SHIP TO:" {
-					// z.Next()
-					// z.Next()
-					// z.Next()
-					// z.Next()
-					// t = z.Token()
-					// shipAdd = strings.TrimSpace(t.Data)
-					// z.Next()
-					// z.Next()
-					// t = z.Token()
-					// shipAdd += "\n" + strings.TrimSpace(t.Data)
 
+				if htmlText == "SHIP TO:" {
 					shipAdd = strings.TrimSpace(getShipAdd(z))
 					shipAdd += "\n" + strings.TrimSpace(getShipAdd(z))
 					// fmt.Printf("shipAdd %T %v \n", shipAdd, shipAdd)
@@ -256,6 +256,7 @@ func getMailItems(srv *gmail.Service, mail []*gmail.Message) []Item {
 				TrackingId:   trackingId,
 				ShipAdd:      shipAdd,
 				MailId:       m.Id,
+				ToEmail:      toEmail,
 			})
 		}
 		// fmt.Printf("%T %v \n", trackingId, trackingId)
@@ -290,6 +291,7 @@ func exportCsv(items []Item) {
 			item.TrackingId,
 			item.ShipAdd,
 			item.MailId,
+			item.ToEmail,
 		}
 		_ = csvwriter.Write(row)
 	}
@@ -302,6 +304,9 @@ func getFirstMails(srv *gmail.Service) ItemsPerPage {
 	var err error
 	fmt.Printf("Search: %v \n", Search)
 	r, err = srv.Users.Messages.List(User).Q(Search).MaxResults(PerPageNumber).Do()
+	if err != nil {
+		log.Fatalf("Failed search mail: %s", err)
+	}
 
 	totalMail += len(r.Messages)
 	fmt.Printf("First Mails Number: %v \n", totalMail)
