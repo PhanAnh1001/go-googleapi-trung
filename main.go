@@ -19,6 +19,27 @@ import (
 	"google.golang.org/api/option"
 )
 
+const User = "me"
+
+const PerPageNumber = 500
+
+const Label = "sephora-arrived"
+
+// const Label = "số-lượng-hàng-the-inkey"
+const StartDate = "2022-09-24"
+const EndDate = "2022-09-25"
+
+const DateFormat = "2006/01/02"
+
+var Search string = fmt.Sprintf("label:%s after:%s before:%s", Label, StartDate, EndDate)
+var CsvFileName string = fmt.Sprintf("items_%s_%s.csv", StartDate, EndDate)
+
+var HeaderCSV = []string{
+	"Date & Time Received", "Name", "Item ID", "Quantity", "Tracking ID", "Ship To", "Mail ID", "To Email",
+}
+
+var totalMail int = 0
+
 // Retrieve a token, saves the token, then returns the generated client.
 func getClient(config *oauth2.Config) *http.Client {
 	// The file token.json stores the user's access and refresh tokens, and is
@@ -27,11 +48,7 @@ func getClient(config *oauth2.Config) *http.Client {
 	tokFile := "token.json"
 	tok, err := tokenFromFile(tokFile)
 
-	// Refresh token is expired affter 7 day from Expiry:
-	// https://developers.google.com/identity/protocols/oauth2#:~:text=A%20Google%20Cloud%20Platform%20project,per%20OAuth%202.0%20client%20ID.
-	isExpired := time.Now().Add(-7 * 24 * time.Hour).After(tok.Expiry)
-	fmt.Printf("Is Expired Refresh Token?: %v \n", isExpired)
-	if err != nil || isExpired {
+	if err != nil {
 		fmt.Printf("Unable to retrieve token from File: %v \n", err)
 		tok = getTokenFromWeb(config)
 		saveToken(tokFile, tok)
@@ -41,7 +58,12 @@ func getClient(config *oauth2.Config) *http.Client {
 
 // Request a token from the web, then returns the retrieved token.
 func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
-	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
+	// To get Refresh Token need add param prompt=consent&access_type=offline
+	// https://stackoverflow.com/questions/10827920/not-receiving-google-oauth-refresh-token
+
+	// To Refresh Token not expired affer 7 days, need set project in google console to public
+	// https://stackoverflow.com/questions/69459141/how-to-fix-google-tokens-expiring-after-seven-days
+	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline, oauth2.ApprovalForce)
 	fmt.Printf("Go to the following link in your browser then type the "+
 		"authorization code: \n%v\n", authURL)
 
@@ -95,27 +117,6 @@ type ItemsPerPage struct {
 	Items         []Item
 	NextPageToken string
 }
-
-const User = "me"
-
-const PerPageNumber = 500
-
-const Label = "sephora-arrived"
-
-// const Label = "số-lượng-hàng-the-inkey"
-const StartDate = "2022-09-24"
-const EndDate = "2022-09-25"
-
-const DateFormat = "2006/01/02"
-
-var Search string = fmt.Sprintf("label:%s after:%s before:%s", Label, StartDate, EndDate)
-var CsvFileName string = fmt.Sprintf("items_%s_%s.csv", StartDate, EndDate)
-
-var HeaderCSV = []string{
-	"Date & Time Received", "Name", "Item ID", "Quantity", "Tracking ID", "Ship To", "Mail ID", "To Email",
-}
-
-var totalMail int = 0
 
 func getShipAdd(z *html.Tokenizer) string {
 	var text string
